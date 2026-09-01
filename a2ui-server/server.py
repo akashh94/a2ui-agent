@@ -17,6 +17,7 @@ Cloud Run: uses the PORT env var Cloud Run injects; see README.md.
 import json
 import os
 import pathlib
+import re
 
 import google.auth
 import google.auth.transport.requests
@@ -79,6 +80,38 @@ def _strip_refs(catalog: dict) -> dict:
 
 
 CATALOG = _strip_refs(CATALOG)
+
+
+# A2UI direct-JSON format: the agent wraps each A2UI message list in
+# <a2ui-json>...</a2ui-json> tags inside its text output (see the SDK's
+# DEFAULT_WORKFLOW_RULES). Split those blocks out so clients can render them.
+_A2UI_BLOCK_RE = re.compile(
+    r"<a2ui-json>(?P<json>.*?)</a2ui-json>", re.DOTALL
+)
+
+
+def _extract_a2ui(text: str) -> tuple[list[dict], str]:
+    """Split ``text`` into (a2ui_json_blocks, surrounding_text).
+
+    Every ``<a2ui-json>...</a2ui-json>`` block is parsed as JSON and removed
+    from the returned text; a JSON block that fails to parse is left in place
+    as text rather than silently dropped.
+    """
+    blocks: list[dict] = []
+    chunks: list[str] = []
+    pos = 0
+    for match in _A2UI_BLOCK_RE.finditer(text):
+        raw = match.group("json").strip()
+        chunks.append(text[pos : match.start()])
+        pos = match.end()
+        try:
+            blocks.append(json.loads(raw))
+        except json.JSONDecodeError:
+            # Not valid JSON (e.g. the model was mid-stream); keep it as text.
+            chunks.append(match.group(0))
+    chunks.append(text[pos:])
+    return blocks, "".join(chunks).strip()
+
 
 app = FastAPI(title="a2ui-server")
 
@@ -212,7 +245,14 @@ async def chat(body: ChatRequest) -> StreamingResponse:
                                 parts = content.get("parts") or []
                                 text = parts[0].get("text", "") if parts else ""
                                 if text:
-                                    yield f"data: {json.dumps({'text': text})}\n\n"
+                                    # The agent may interleave conversational
+                                    # text with <a2ui-json> blocks; relay each
+                                    # as its own SSE frame.
+                                    a2ui_blocks, remaining = _extract_a2ui(text)
+                                    for block in a2ui_blocks:
+                                        yield f"data: {json.dumps({'a2ui': block})}\n\n"
+                                    if remaining:
+                                        yield f"data: {json.dumps({'text': remaining})}\n\n"
         except Exception as exc:  # keep the SSE stream alive and report cleanly
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"
         yield "data: [DONE]\n\n"
