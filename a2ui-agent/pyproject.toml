@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "a2ui-agent"
+version = "0.1.0"
+description = "A2UI agent — ADK LlmAgent (google_search + get_a2ui_catalog) for Agent Engine"
+requires-python = ">=3.11"
+dependencies = [
+    "google-adk[gcp,agent-identity]>=2.6.2",
+    "google-cloud-aiplatform[agent_engines,adk]>=1.153.1",
+]
+
+[project.optional-dependencies]
+lint = [
+    "ruff>=0.4.6,<1.0.0",
+    "ty>=0.0.1a0",
+    "codespell>=2.2.0,<3.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 88

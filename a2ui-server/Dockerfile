@@ -10,7 +10,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the app.
-COPY agent.py catalog.json server.py ./
+COPY server.py catalog.json ./
 
 # Cloud Run injects PORT; default to 8000 for local runs.
 ENV PORT=8000

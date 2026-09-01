@@ -19,3 +19,6 @@ venv/
 deploy.personal.env
 build.personal.sh
 deploy.personal.sh
+
+# Local tooling (Command Code settings/taste)
+.commandcode/
