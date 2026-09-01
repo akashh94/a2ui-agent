@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "http://localhost:8000/etcatalog",
+  "title": "A2UI Agent Basic Catalog",
+  "description": "A minimal A2UI catalog for the a2ui-agent demo. The agent reads this catalog (via the get_a2ui_catalog tool) to answer questions about which UI components are available.",
+  "catalogId": "http://localhost:8000/etcatalog",
+  "components": {
+    "Text": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
+        },
+        {
+          "$ref": "#/$defs/CatalogComponentCommon"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "const": "Text"
+            },
+            "text": {
+              "type": "string",
+              "description": "The text content to display."
+            },
+            "variant": {
+              "type": "string",
+              "description": "A hint for the base text style.",
+              "enum": ["h1", "h2", "h3", "h4", "h5", "caption", "body"],
+              "default": "body"
+            }
+          },
+          "required": ["component", "text"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Button": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
+        },
+        {
+          "$ref": "#/$defs/CatalogComponentCommon"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "const": "Button"
+            },
+            "child": {
+              "type": "string",
+              "description": "The ID of the child component. Use a 'Text' component for a labeled button."
+            },
+            "variant": {
+              "type": "string",
+              "description": "A hint for the button style.",
+              "enum": ["default", "primary", "borderless"],
+              "default": "default"
+            },
+            "action": {
+              "type": "object",
+              "description": "The action to perform when the button is clicked.",
+              "properties": {
+                "name": { "type": "string" }
+              },
+              "required": ["name"]
+            }
+          },
+          "required": ["component", "child", "action"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Column": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
+        },
+        {
+          "$ref": "#/$defs/CatalogComponentCommon"
+        },
+        {
+          "type": "object",
+          "description": "A layout component that arranges its children vertically.",
+          "properties": {
+            "component": {
+              "const": "Column"
+            },
+            "children": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "The IDs of the child components, in vertical order."
+            },
+            "align": {
+              "type": "string",
+              "description": "Alignment of children along the cross axis.",
+              "enum": ["start", "center", "end", "stretch"],
+              "default": "stretch"
+            }
+          },
+          "required": ["component", "children"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Row": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
+        },
+        {
+          "$ref": "#/$defs/CatalogComponentCommon"
+        },
+        {
+          "type": "object",
+          "description": "A layout component that arranges its children horizontally.",
+          "properties": {
+            "component": {
+              "const": "Row"
+            },
+            "children": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "The IDs of the child components, in horizontal order."
+            },
+            "justify": {
+              "type": "string",
+              "description": "Arrangement of children along the main axis.",
+              "enum": ["start", "center", "end", "spaceBetween", "spaceAround", "spaceEvenly"],
+              "default": "start"
+            }
+          },
+          "required": ["component", "children"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Card": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
+        },
+        {
+          "$ref": "#/$defs/CatalogComponentCommon"
+        },
+        {
+          "type": "object",
+          "description": "A titled container that groups related content.",
+          "properties": {
+            "component": {
+              "const": "Card"
+            },
+            "child": {
+              "type": "string",
+              "description": "The ID of the single child component rendered inside the card. To display multiple elements, wrap them in a Column or Row and pass that container's ID."
+            },
+            "title": {
+              "type": "string",
+              "description": "An optional title shown at the top of the card."
+            }
+          },
+          "required": ["component", "child"]
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  },
+  "functions": {},
+  "$defs": {
+    "CatalogComponentCommon": {
+      "type": "object",
+      "properties": {
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column, similar to CSS flex-grow."
+        }
+      }
+    }
+  }
+}
