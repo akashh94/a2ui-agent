@@ -82,8 +82,9 @@ Catalog:
 curl http://localhost:8000/etcatalog
 ```
 
-Chat — the local `/chat` proxies to the Agent Engine resource named by
-`AGENT_ENGINE_RESOURCE` (set it to your deployed agent):
+Chat — the local `/chat` proxies to the Agent Engine identified by
+`AGENT_ENGINE_PROJECT` / `AGENT_ENGINE_LOCATION` / `AGENT_ENGINE_ID` (set them
+to your deployed agent):
 
 ```bash
 curl -N -X POST http://localhost:8000/chat \
@@ -158,10 +159,11 @@ manifest `agents-cli-manifest.yaml` defines the Agent Engine target, and
 
 ### 3. Point the facade at the agent
 
-Set `AGENT_ENGINE_RESOURCE` (the engine's `projects/.../reasoningEngines/<id>`
-from the deploy output) in `a2ui-server`'s env file and redeploy the
-a2ui-server (or update the env var in the Cloud Run console). Then the
-public `/chat` endpoint streams from your deployed agent.
+Set `AGENT_ENGINE_PROJECT` / `AGENT_ENGINE_LOCATION` / `AGENT_ENGINE_ID` (the
+engine's project, region, and `reasoningEngines/<id>` from the deploy output)
+in `a2ui-server`'s env file and redeploy the a2ui-server (or update the env
+vars in the Cloud Run console). Then the public `/chat` endpoint streams from
+your deployed agent.
 
 ## IAM / service accounts at a glance
 

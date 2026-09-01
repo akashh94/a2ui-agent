@@ -17,7 +17,6 @@ Cloud Run: uses the PORT env var Cloud Run injects; see README.md.
 import json
 import os
 import pathlib
-import re
 
 import google.auth
 import google.auth.transport.requests
@@ -92,42 +91,17 @@ app.add_middleware(
 )
 
 
-def _agent_engine_resource() -> str:
-    """The Agent Engine resource name the /chat proxy calls.
-
-    Format: projects/{project}/locations/{location}/reasoningEngines/{id}
-    """
-    return os.getenv(
-        "AGENT_ENGINE_RESOURCE",
-        "projects/REPLACE/locations/us-central1/reasoningEngines/REPLACE",
-    )
-
-
-# The ADK Agent Engine exposes :streamQuery (there is no plain :query class
-# method for running the agent — see akapal-geap-ui/server.js for the same
-# pattern). The response body is a sequence of concatenated JSON event
-# objects, so events must be extracted incrementally rather than parsed as a
-# single document.
-
-_ENGINE_RESOURCE_RE = re.compile(
-    r"projects/(?P<project>[^/]+)/locations/(?P<location>[^/]+)/"
-    r"reasoningEngines/(?P<engine_id>[^/]+)"
-)
-
-
 def _engine_stream_url() -> str:
     """The :streamQuery REST URL for the configured Agent Engine."""
-    resource = os.getenv(
-        "AGENT_ENGINE_RESOURCE",
-        "projects/REPLACE/locations/us-central1/reasoningEngines/REPLACE",
-    )
-    m = _ENGINE_RESOURCE_RE.search(resource)
-    if not m:
-        raise ValueError(f"Unparseable AGENT_ENGINE_RESOURCE: {resource}")
+    project = os.getenv("AGENT_ENGINE_PROJECT", os.getenv("PROJECT_ID", ""))
+    location = os.getenv("AGENT_ENGINE_LOCATION", os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"))
+    engine_id = os.getenv("AGENT_ENGINE_ID", "")
+    if not project or not engine_id:
+        raise ValueError("AGENT_ENGINE_PROJECT and AGENT_ENGINE_ID must be set")
     return (
-        f"https://{m['location']}-aiplatform.googleapis.com/v1/"
-        f"projects/{m['project']}/locations/{m['location']}/"
-        f"reasoningEngines/{m['engine_id']}:streamQuery"
+        f"https://{location}-aiplatform.googleapis.com/v1/"
+        f"projects/{project}/locations/{location}/"
+        f"reasoningEngines/{engine_id}:streamQuery"
     )
 
 
