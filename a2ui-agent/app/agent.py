@@ -84,4 +84,4 @@ root_agent = LlmAgent(
 # Backward-compatible alias (the old deploy_agent_engine.py path used "agent").
 agent = root_agent
 
-__all__ = ["root_agent", "agent"]
+__all__ = ["agent", "root_agent"]
