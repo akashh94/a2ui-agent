@@ -44,6 +44,43 @@ CATALOG = json.loads(
 CATALOG["$id"] = CATALOG_URL
 CATALOG["catalogId"] = CATALOG_URL
 
+
+def _strip_refs(catalog: dict) -> dict:
+    """Remove $refs from the catalog so consumers (the agent's tool response)
+    don't hit model-side function-response validation failures.
+
+    Components reference a remote schema (https://a2ui.org/specification/...)
+    and the local $defs/CatalogComponentCommon. Gemini rejects any $ref it
+    cannot resolve to a display_name. The components' own properties carry the
+    real data, and CatalogComponentCommon only adds optional "weight", so the
+    refs are inlined/dropped.
+    """
+    defs = catalog.get("$defs") or {}
+    components = catalog.get("components") or {}
+    for schema in components.values():
+        if not isinstance(schema, dict):
+            continue
+        # Inline local $defs properties (CatalogComponentCommon -> weight).
+        for part in schema.get("allOf") or []:
+            if isinstance(part, dict) and part.get("$ref", "").startswith("#/"):
+                ref_name = part["$ref"].split("/")[-1]
+                schema.setdefault("properties", {}).update(
+                    (defs.get(ref_name) or {}).get("properties", {})
+                )
+        # Drop all $ref parts (external and internal); data is inlined above.
+        schema["allOf"] = [
+            part
+            for part in (schema.get("allOf") or [])
+            if not (isinstance(part, dict) and "$ref" in part)
+        ]
+        if not schema["allOf"]:
+            del schema["allOf"]
+    catalog.pop("$defs", None)
+    return catalog
+
+
+CATALOG = _strip_refs(CATALOG)
+
 app = FastAPI(title="a2ui-server")
 
 # CORS: allow browser clients from anywhere by default (public demo endpoint).

@@ -19,7 +19,9 @@ Deployment: this module is the "agent" passed to agent_engines.create(...);
 the a2ui-server /chat endpoint proxies to the deployed Agent Engine.
 """
 
+import json
 import os
+import urllib.request
 
 from google.adk.agents import LlmAgent
 from google.adk.models.google_llm import Gemini
@@ -52,61 +54,8 @@ def get_a2ui_catalog() -> dict:
     """Get the A2UI component catalog (available components and their
     properties). Call this when the user asks about A2UI components, the A2UI
     catalog, building agent-driven UIs, or anything mentioning 'etcatalog'."""
-    # ponytail: static catalog for now — the full /etcatalog JSON has $refs the
-    # model's function-response validation rejects; swap in the live fetch once
-    # the catalog is served without $refs.
-    return {
-        "components": {
-            "Text": {
-                "type": "object",
-                "properties": {
-                    "component": {"const": "Text"},
-                    "text": {"type": "string", "description": "The text content to display."},
-                    "variant": {
-                        "type": "string",
-                        "description": "Text style hint.",
-                        "enum": ["h1", "h2", "h3", "h4", "h5", "caption", "body"],
-                        "default": "body",
-                    },
-                },
-                "required": ["component", "text"],
-            },
-            "Button": {
-                "type": "object",
-                "properties": {
-                    "component": {"const": "Button"},
-                    "label": {"type": "string", "description": "Button label."},
-                    "action": {"type": "string", "description": "Action to trigger when clicked."},
-                },
-                "required": ["component", "label", "action"],
-            },
-            "Column": {
-                "type": "object",
-                "properties": {
-                    "component": {"const": "Column"},
-                    "children": {"type": "array", "items": {"type": "object"}, "description": "Child components arranged vertically."},
-                },
-                "required": ["component", "children"],
-            },
-            "Row": {
-                "type": "object",
-                "properties": {
-                    "component": {"const": "Row"},
-                    "children": {"type": "array", "items": {"type": "object"}, "description": "Child components arranged horizontally."},
-                },
-                "required": ["component", "children"],
-            },
-            "Card": {
-                "type": "object",
-                "properties": {
-                    "component": {"const": "Card"},
-                    "title": {"type": "string", "description": "Card title."},
-                    "children": {"type": "array", "items": {"type": "object"}, "description": "Child components."},
-                },
-                "required": ["component", "title", "children"],
-            },
-        }
-    }
+    with urllib.request.urlopen(f"{CATALOG_URL}/etcatalog", timeout=30) as resp:
+        return json.loads(resp.read().decode("utf-8"))
 
 
 catalog_tool = FunctionTool(get_a2ui_catalog)
