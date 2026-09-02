@@ -138,15 +138,24 @@ def build_agent() -> LlmAgent:
     """Build the agent. The SendA2uiToClientToolset is always present but
     resolves to zero tools when A2UI is not enabled for the session; the
     schema/examples it injects come from session state (see providers)."""
+    from typing import cast
+
     from a2ui.adk.send_a2ui_to_client_toolset import SendA2uiToClientToolset
     from google.adk.agents.llm_agent import ToolUnion
+    from google.adk.tools.base_toolset import BaseToolset
 
     tools: list[ToolUnion] = [
         _google_search_tool(),
-        SendA2uiToClientToolset(
-            a2ui_enabled=a2ui_enabled_provider,
-            a2ui_catalog=a2ui_catalog_provider,
-            a2ui_examples=a2ui_examples_provider,
+        # The @experimental decorator on SendA2uiToClientToolset hides the
+        # BaseToolset base (and replaces __init__) from static checkers, so
+        # cast to the real base for the tools list.
+        cast(
+            BaseToolset,
+            SendA2uiToClientToolset(
+                a2ui_enabled=a2ui_enabled_provider,
+                a2ui_catalog=a2ui_catalog_provider,
+                a2ui_examples=a2ui_examples_provider,
+            ),
         ),
     ]
 
