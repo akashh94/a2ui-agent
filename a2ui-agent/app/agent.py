@@ -23,7 +23,7 @@ import os
 import pathlib
 
 from a2ui.inference_formats.direct_json import DirectJsonFormat
-from a2ui.schema.catalog import CatalogConfig
+from a2ui.schema.catalog import A2uiCatalog, CatalogConfig
 from a2ui.schema.catalog_provider import FileSystemCatalogProvider
 from a2ui.schema.common_modifiers import remove_strict_validation
 from a2ui.schema.constants import VERSION_0_9
@@ -120,14 +120,29 @@ def a2ui_enabled_provider(ctx: ReadonlyContext) -> bool:
     return bool(ctx.state.get(A2UI_ENABLED_KEY, False))
 
 
-def a2ui_catalog_provider(ctx: ReadonlyContext):
-    """The negotiated A2uiCatalog stored in session state."""
-    return ctx.state.get(A2UI_CATALOG_KEY)
+def a2ui_catalog_provider(ctx: ReadonlyContext) -> A2uiCatalog:
+    """The negotiated A2uiCatalog stored in session state.
+
+    The executor only sets A2UI_ENABLED_KEY alongside a real catalog, so when
+    this provider is consulted the catalog is present. Fall back to the
+    default selected catalog if state is missing (defensive)."""
+    catalog = ctx.state.get(A2UI_CATALOG_KEY)
+    if isinstance(catalog, A2uiCatalog):
+        return catalog
+    return inference_format.get_selected_catalog()
 
 
-def a2ui_examples_provider(ctx: ReadonlyContext):
-    """The validated examples string stored in session state."""
-    return ctx.state.get(A2UI_EXAMPLES_KEY)
+def a2ui_examples_provider(ctx: ReadonlyContext) -> str:
+    """The validated examples string stored in session state.
+
+    Falls back to loading the default catalog's examples if state is missing.
+    """
+    examples = ctx.state.get(A2UI_EXAMPLES_KEY)
+    if isinstance(examples, str):
+        return examples
+    return inference_format.load_examples(
+        inference_format.get_selected_catalog(), validate=True
+    )
 
 
 def _google_search_tool() -> GoogleSearchAgentTool:
