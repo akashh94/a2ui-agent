@@ -139,6 +139,16 @@ def build_agent() -> LlmAgent:
     resolves to zero tools when A2UI is not enabled for the session; the
     schema/examples it injects come from session state (see providers)."""
     from a2ui.adk.send_a2ui_to_client_toolset import SendA2uiToClientToolset
+    from google.adk.agents.llm_agent import ToolUnion
+
+    tools: list[ToolUnion] = [
+        _google_search_tool(),
+        SendA2uiToClientToolset(
+            a2ui_enabled=a2ui_enabled_provider,
+            a2ui_catalog=a2ui_catalog_provider,
+            a2ui_examples=a2ui_examples_provider,
+        ),
+    ]
 
     return LlmAgent(
         name="a2ui_agent",
@@ -150,14 +160,7 @@ def build_agent() -> LlmAgent:
             + "\n\n## UI Description:\n"
             + UI_DESCRIPTION
         ),
-        tools=[
-            _google_search_tool(),
-            SendA2uiToClientToolset(
-                a2ui_enabled=a2ui_enabled_provider,
-                a2ui_catalog=a2ui_catalog_provider,
-                a2ui_examples=a2ui_examples_provider,
-            ),
-        ],
+        tools=tools,
         disallow_transfer_to_peers=True,
     )
 

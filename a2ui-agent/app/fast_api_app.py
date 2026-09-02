@@ -14,7 +14,7 @@ import contextlib
 import logging
 import os
 import pathlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 
 import google.auth
 from a2a.server.tasks import InMemoryTaskStore
@@ -49,7 +49,7 @@ APP_URL = os.getenv(
 
 
 @contextlib.asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.agent import build_agent
     from app.app_utils.a2a import attach_a2a_routes
 
