@@ -1,0 +1,84 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "row_demo_surface",
+      "catalogId": "https://a2ui-agent-personal-947331501288.us-central1.run.app/catalog.json"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "row_demo_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title_text", "row"],
+          "justify": "start",
+          "align": "stretch"
+        },
+        {
+          "id": "title_text",
+          "component": "Text",
+          "text": "Buttons laid out in a row",
+          "variant": "h3"
+        },
+        {
+          "id": "row",
+          "component": "Row",
+          "children": ["one_button", "two_button", "three_button"],
+          "justify": "spaceBetween",
+          "align": "center"
+        },
+        {
+          "id": "one_button",
+          "component": "Button",
+          "child": "one_button_label",
+          "action": {
+            "event": {
+              "name": "one_click"
+            }
+          }
+        },
+        {
+          "id": "one_button_label",
+          "component": "Text",
+          "text": "One"
+        },
+        {
+          "id": "two_button",
+          "component": "Button",
+          "child": "two_button_label",
+          "variant": "primary",
+          "action": {
+            "event": {
+              "name": "two_click"
+            }
+          }
+        },
+        {
+          "id": "two_button_label",
+          "component": "Text",
+          "text": "Two"
+        },
+        {
+          "id": "three_button",
+          "component": "Button",
+          "child": "three_button_label",
+          "variant": "borderless",
+          "action": {
+            "event": {
+              "name": "three_click"
+            }
+          }
+        },
+        {
+          "id": "three_button_label",
+          "component": "Text",
+          "text": "Three"
+        }
+      ]
+    }
+  }
+]

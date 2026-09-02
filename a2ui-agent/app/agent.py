@@ -1,60 +1,81 @@
-"""The a2ui-agent ADK agent (deployed on Vertex AI Agent Engine).
+"""The a2ui-agent ADK agent (A2A service on Cloud Run).
 
-An LlmAgent with three capabilities:
-  * google_search       -- Google Search via a sub-agent wrapper (GoogleSearchAgentTool)
-  * get_a2ui_catalog    -- fetches the A2UI catalog from the a2ui-server
-                           (Cloud Run) /etcatalog over HTTP.
-  * A2UI message output -- for A2UI-related requests, the model generates A2UI
-                           messages (render/update) per the A2UI v0.9 schema,
-                           driven by a2ui-agent-sdk's DirectJsonFormat.
+An LlmAgent with:
+  * google_search    -- general questions via a Google Search sub-agent
+                        (GoogleSearchAgentTool), used when A2UI is not active
+                        (the client did not request the A2UI extension).
+  * send_a2ui_json_to_client -- provided by SendA2uiToClientToolset, enabled
+                        only when the A2UI extension is active. The model
+                        calls it with the A2UI v0.9 message list it built
+                        against the catalog in app/catalog.json.
 
-The model decides WHEN to call get_a2ui_catalog or google_search; for A2UI
-UI-generation requests it emits A2UI JSON instead of plain text.
+The catalog (app/catalog.json) is the single source of truth: its schema is
+injected into the LLM request per-turn by the toolset (from session state,
+which the executor populates after catalog negotiation), and it is served to
+clients at /catalog.json for them to register renderers under the catalogId.
 
-Deployment: the a2ui-server /chat endpoint proxies to this agent on Agent Engine.
+Deployment: Cloud Run (planner-style), served over A2A by fast_api_app.py.
 """
 
-import json
-import os
-import urllib.request
+from __future__ import annotations
 
-from a2ui.basic_catalog.provider import BasicCatalog
+import os
+import pathlib
+
 from a2ui.inference_formats.direct_json import DirectJsonFormat
+from a2ui.schema.catalog import CatalogConfig
+from a2ui.schema.catalog_provider import FileSystemCatalogProvider
 from a2ui.schema.common_modifiers import remove_strict_validation
 from a2ui.schema.constants import VERSION_0_9
 from google.adk.agents import LlmAgent
+from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.models.google_llm import Gemini
-from google.adk.tools import FunctionTool
 from google.adk.tools.google_search_agent_tool import (
     GoogleSearchAgentTool,
     create_google_search_agent,
 )
 
-# Base URL of the a2ui-server (Cloud Run). On Agent Engine this must be the
-# deployed service URL (set via env var when creating the Agent Engine).
-# The catalog tool calls <CATALOG_URL>/etcatalog.
-CATALOG_URL = os.getenv("CATALOG_URL", "http://localhost:8000")
+_APP_DIR = pathlib.Path(__file__).resolve().parent
+
+# Public catalogId — the same URL /catalog.json is served at. Kept in sync
+# with app/catalog.json via CATALOG_URI (APP_URL + "/catalog.json").
+CATALOG_URI = (
+    os.getenv("APP_URL", "https://a2ui-agent-personal-947331501288.us-central1.run.app")
+    + "/catalog.json"
+)
 
 ROLE_DESCRIPTION = (
-    "You are a helpful assistant that answers questions and, when asked about "
-    "A2UI, generates A2UI messages. Your final output for A2UI requests MUST "
-    "be valid A2UI v0.9 JSON (a list of A2UI messages)."
+    "You are a helpful assistant. When the user asks you to show UI, a demo, "
+    "or an interface, you build an A2UI interface by calling the "
+    "send_a2ui_json_to_client tool with a valid A2UI v0.9 JSON message list. "
+    "For anything else (facts, questions, chat), answer in plain text using "
+    "google_search when needed."
 )
 
 UI_DESCRIPTION = """
-- Use the catalog data returned by get_a2ui_catalog when you need component
-  details.
-- For questions about A2UI components or building agent-driven UIs, generate
-  an A2UI render/update message list using the schema and examples below.
-- For general questions (facts, time, weather, news), use google_search and
-  reply in plain text -- do NOT generate A2UI messages.
+- Build surfaces with the components defined in the catalog provided to you
+  (createSurface -> updateComponents). Use ONLY component names and
+  properties from that catalog. Never invent components.
+- Always start with a createSurface message carrying the catalogId, then one
+  or more updateComponents messages defining the component tree (root first,
+  parents before children).
+- Do not send conversational text; the A2UI payload IS your answer.
+"""
+
+WORKFLOW_DESCRIPTION = """
+1. Determine intent: UI request (build an A2UI interface) vs a normal chat /
+   fact question.
+2. If a normal question, answer in plain text (google_search for facts).
+3. If a UI request, call send_a2ui_json_to_client with the full A2UI message
+   list as the a2ui_json argument, using the schema and examples injected
+   into the request. If the tool reports an error, fix the payload and call
+   it again.
 """
 
 
 def _build_model() -> Gemini:
-    """Build the Gemini model over Vertex AI using Application Default
-    Credentials (the Agent Engine service account in production, gcloud auth
-    application-default login locally). No API key needed."""
+    """Build the Gemini model over Vertex AI using ADC (Cloud Run SA in
+    production, gcloud auth application-default login locally)."""
     return Gemini(
         model=os.getenv("AGENT_MODEL", "gemini-2.5-flash"),
         client_kwargs={
@@ -64,63 +85,98 @@ def _build_model() -> Gemini:
     )
 
 
-def get_a2ui_catalog() -> dict:
-    """Get the A2UI component catalog (available components and their
-    properties). Call this when the user asks about A2UI components, the A2UI
-    catalog, building agent-driven UIs, or anything mentioning 'etcatalog'."""
-    with urllib.request.urlopen(f"{CATALOG_URL}/etcatalog", timeout=30) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+def build_inference_format() -> DirectJsonFormat:
+    """The DirectJsonFormat over the custom catalog (app/catalog.json).
+
+    Uses FileSystemCatalogProvider directly (CatalogConfig.from_path mangles
+    Windows drive paths via os.path.abspath on the file URI).
+    """
+    return DirectJsonFormat(
+        version=VERSION_0_9,
+        catalogs=[
+            CatalogConfig(
+                name="a2ui-demo",
+                provider=FileSystemCatalogProvider(str(_APP_DIR / "catalog.json")),
+                examples_path=str(_APP_DIR / "examples"),
+            ),
+        ],
+        schema_modifiers=[remove_strict_validation],
+        accepts_inline_catalogs=True,
+    )
 
 
-catalog_tool = FunctionTool(get_a2ui_catalog)
+inference_format = build_inference_format()
+
+# Session-state keys (populated by the executor after catalog negotiation;
+# read by the SendA2uiToClientToolset providers below). Kept in sync with
+# app/agent_executor.py.
+A2UI_ENABLED_KEY = "system:a2ui_enabled"
+A2UI_CATALOG_KEY = "system:a2ui_catalog"
+A2UI_EXAMPLES_KEY = "system:a2ui_examples"
 
 
-google_search_tool = GoogleSearchAgentTool(create_google_search_agent(_build_model()))
+def a2ui_enabled_provider(ctx: ReadonlyContext) -> bool:
+    """True when the A2UI extension was negotiated for this session."""
+    return bool(ctx.state.get(A2UI_ENABLED_KEY, False))
 
 
-# A2UI system prompt: schema + examples from the SDK's built-in catalog,
-# following the official restaurant_finder sample (DirectJsonFormat +
-# remove_strict_validation, which drops additionalProperties:false so the
-# model can include extra fields in generated components).
-schema_manager = DirectJsonFormat(
-    version=VERSION_0_9,
-    catalogs=[
-        BasicCatalog.get_config(version=VERSION_0_9),
-    ],
-    schema_modifiers=[remove_strict_validation],
-)
-A2UI_INSTRUCTION = schema_manager.generate_system_prompt(
-    role_description=ROLE_DESCRIPTION,
-    ui_description=UI_DESCRIPTION,
-    include_schema=True,
-    include_examples=True,
-    validate_examples=True,
-)
+def a2ui_catalog_provider(ctx: ReadonlyContext):
+    """The negotiated A2uiCatalog stored in session state."""
+    return ctx.state.get(A2UI_CATALOG_KEY)
 
-# ADK treats "{expression}" in the instruction as a session-state template
-# variable and raises if the session has no "expression" state. The SDK's
-# catalog schema mentions it only in a docstring example, so drop the literal
-# braces to keep ADK from interpolating it.
-A2UI_INSTRUCTION = A2UI_INSTRUCTION.replace("{expression}", "expression")
 
-root_agent = LlmAgent(
-    name="a2ui_agent",
-    model=_build_model(),
-    instruction=(
-        A2UI_INSTRUCTION + "\n\n"
-        "Use google_search for general questions (facts, current time, "
-        "weather, news, capital cities, etc.) -- never call get_a2ui_catalog "
-        "for those.\n\n"
-        "Call get_a2ui_catalog ONLY when the user asks specifically about "
-        "A2UI: 'a2ui demo', the A2UI catalog, A2UI components, A2UI "
-        "catalogs, building agent-driven UIs, what A2UI can do, or anything "
-        "mentioning 'etcatalog'. Never invent component names or properties "
-        "from memory -- answer from the catalog data the tool returns."
-    ),
-    tools=[google_search_tool, catalog_tool],
-)
+def a2ui_examples_provider(ctx: ReadonlyContext):
+    """The validated examples string stored in session state."""
+    return ctx.state.get(A2UI_EXAMPLES_KEY)
 
-# Backward-compatible alias (the old deploy_agent_engine.py path used "agent").
-agent = root_agent
 
-__all__ = ["agent", "root_agent"]
+def _google_search_tool() -> GoogleSearchAgentTool:
+    return GoogleSearchAgentTool(create_google_search_agent(_build_model()))
+
+
+def build_agent() -> LlmAgent:
+    """Build the agent. The SendA2uiToClientToolset is always present but
+    resolves to zero tools when A2UI is not enabled for the session; the
+    schema/examples it injects come from session state (see providers)."""
+    from a2ui.adk.send_a2ui_to_client_toolset import SendA2uiToClientToolset
+
+    return LlmAgent(
+        name="a2ui_agent",
+        model=_build_model(),
+        instruction=(
+            ROLE_DESCRIPTION
+            + "\n\n## Workflow Description:\n"
+            + WORKFLOW_DESCRIPTION
+            + "\n\n## UI Description:\n"
+            + UI_DESCRIPTION
+        ),
+        tools=[
+            _google_search_tool(),
+            SendA2uiToClientToolset(
+                a2ui_enabled=a2ui_enabled_provider,
+                a2ui_catalog=a2ui_catalog_provider,
+                a2ui_examples=a2ui_examples_provider,
+            ),
+        ],
+        disallow_transfer_to_peers=True,
+    )
+
+
+# Backward-compatible aliases.
+agent = build_agent()
+root_agent = agent
+
+__all__ = [
+    "A2UI_CATALOG_KEY",
+    "A2UI_ENABLED_KEY",
+    "A2UI_EXAMPLES_KEY",
+    "CATALOG_URI",
+    "a2ui_catalog_provider",
+    "a2ui_enabled_provider",
+    "a2ui_examples_provider",
+    "agent",
+    "build_agent",
+    "build_inference_format",
+    "inference_format",
+    "root_agent",
+]

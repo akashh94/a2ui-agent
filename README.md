@@ -1,201 +1,177 @@
 # a2ui-agent
 
-A single-repo, two-service project: an ADK `LlmAgent` (Google Search + an A2UI
-catalog tool) deployed on **Vertex AI Agent Engine**, and a **Cloud Run**
-catalog + chat facade that serves the A2UI catalog and streams `/chat`
-responses to the deployed agent.
+A single-service A2A + A2UI agent on **Cloud Run**, following the official
+[A2UI agent-development](https://a2ui.org/guides/agent-development/) flow.
+
+> **New here?** Read the beginner docs:
+> [docs/README.md](docs/README.md) → [01-overview](docs/01-overview.md) →
+> [02-architecture](docs/02-architecture.md) → [03-flow](docs/03-flow.md) →
+> [04-catalog](docs/04-catalog.md) → [05-glossary](docs/05-glossary.md) →
+> [06-troubleshooting](docs/06-troubleshooting.md).
+
+The service hosts an ADK `LlmAgent` over **A2A** (AgentCard + JSON-RPC). The
+card advertises the **A2UI extension** with `supportedCatalogIds` pointing at
+this service's custom catalog (`/catalog.json`). When a client that can render
+that catalog sends the A2UI extension, the agent generates A2UI v0.9 messages
+(as A2A `DataPart`s, mime `application/json+a2ui`) from **only the components
+in that catalog**. Without the extension, it answers in plain text via
+`google_search`.
 
 ```
-Browser / client
-   │  HTTPS (public)
-   ▼
-a2ui-server (Cloud Run) ── GET /etcatalog (static catalog.json)
-   │                       ── POST /chat (SSE proxy)
-   │                             │
-   │                             │ Vertex AI API (SA/ADC, gRPC)
-   ▼                             ▼
-                         a2ui-agent (Agent Engine)
-                               │
-                               │ ID-token auth (RestApiTool, audience=catalog URL)
-                               ▼
-                         a2ui-server /etcatalog (private, IAM-only)
+Browser demo client (client/)           a2ui-agent (Cloud Run)
+   │  GET /catalog.json  ────────────►  GET  /catalog.json   (custom catalog JSON)
+   │  GET /.well-known/agent-card.json ► GET /.well-known/agent-card.json
+   │                                     (card advertises A2UI ext + catalogId)
+   │  POST /a2a/a2ui_agent  ◄────────►  POST /a2a/a2ui_agent
+   │   JSON-RPC message/send             (executor negotiates extension/catalog,
+   │   extensions:[a2ui v0.9]              runs LlmAgent, returns A2A parts)
+   ▼   clientCapabilities
+  renders DataParts (createSurface / updateComponents)
 ```
 
-- **a2ui-server/** — Cloud Run. Serves `GET /etcatalog` (the A2UI catalog as
-  JSON, official v0.9 JSON Schema format, same shape as `@a2ui/lit`'s
-  published basic catalog) and `POST /chat`, which streams the agent's reply
-  as SSE. `/chat` is a thin proxy: it forwards the message to the deployed
-  Agent Engine and relays streamed events back to the client.
-- **a2ui-agent/** — Agent Engine. The ADK `LlmAgent` with two tools:
-  `google_search` for general web questions, and `get_a2ui_catalog`, a REST
-  tool that fetches the catalog from the a2ui-server over HTTP using a
-  service-account **ID token** (audience = the catalog URL). The model decides
-  *when* to call the catalog tool; it never authors component JSON itself.
+## What each piece does
 
-The catalog is data the agent fetches from the a2ui-server — the model
-never authors component JSON itself, and the agent has no local copy.
+- **`a2ui-agent/app/agent.py`** — the ADK `LlmAgent`. Tools:
+  - `google_search` (sub-agent) for general/fact questions — the plain-text path.
+  - `SendA2uiToClientToolset` — the A2UI tool path. Enabled only when the A2UI
+    extension was negotiated for the session; its schema/examples come from
+    session state (populated by the executor). The model calls
+    `send_a2ui_json_to_client` with the A2UI message list.
+- **`a2ui-agent/app/catalog.json`** — **the custom catalog** (single source of
+  truth). `catalogId` = `https://<APP_URL>/catalog.json`. Components: Text,
+  Button, Row, Column, Card. Loaded into `DirectJsonFormat` at build time
+  (schema goes in the LLM request) **and** served at `/catalog.json` for
+  clients to register renderers under the same `catalogId`.
+- **`a2ui-agent/app/agent_executor.py`** — `A2aAgentExecutor` subclass (modeled
+  on the official rizzcharts sample): per request it runs
+  `try_activate_a2ui_extension` (extension present → A2UI path), resolves the
+  catalog via `get_selected_catalog(clientCapabilities)`, and writes
+  `system:a2ui_*` into session state. `A2uiEventConverter` turns the agent's
+  `send_a2ui_json_to_client` responses into A2A `DataPart`s.
+- **`a2ui-agent/app/app_utils/a2a.py`** — attaches the A2A routes using the
+  `a2a-sdk` line that `a2ui-agent-sdk` pins (`a2a-sdk <0.4`): card at
+  `/.well-known/agent-card.json`, JSON-RPC at `/a2a/a2ui_agent`
+  (`A2AFastAPIApplication`).
+- **`a2ui-agent/app/fast_api_app.py`** — FastAPI app (planner-style): lifespan
+  builds the agent + `Runner` and attaches A2A routes; serves `/catalog.json`,
+  the demo client at `/client`, and `/`.
+- **`a2ui-agent/client/`** — a minimal **demo client**: a single HTML page that
+  fetches the card + catalog, registers the 5 components as renderers, sends
+  A2A `message/send` with the A2UI extension, and renders the returned
+  `DataPart`s.
 
-## How the two tools split the work
+## How the agent is constrained to the catalog
 
-- **`google_search`** — general web questions ("what is the capital of
-  France?").
-- **`get_a2ui_catalog`** — calls `GET <a2ui-server>/etcatalog` via a
-  `RestApiTool` (from an `OpenAPIToolset`), authenticated with the Agent
-  Engine service account's ID token. Same catalog `/etcatalog` serves.
+1. **Schema injection**: `DirectJsonFormat` renders the catalog schema +
+   validated examples into the LLM request (via the toolset) whenever A2UI is
+   active.
+2. **Catalog-aware validation**: `SendA2uiToClientToolset` validates the
+   model's payload against the catalog (`A2uiValidator`) before returning it;
+   invalid payloads error back to the model, which retries.
+3. **`createSurface.catalogId`**: the agent must echo the catalogId; a
+   conforming renderer only renders components whose catalogId it registered.
 
-## Setup (local)
+## When the agent produces A2UI vs text (two gates)
 
-Each service is self-contained; install and run them separately.
+- **Protocol gate (executor)**: the client's message carries
+  `extensions: ["https://a2ui.org/a2a-extension/a2ui/v0.9"]` →
+  `try_activate_a2ui_extension` activates A2UI. No extension → plain text
+  (google_search) path.
+- **Model gate (prompt)**: with A2UI active, the instruction tells the model
+  to build a UI (`send_a2ui_json_to_client`) for UI-worthy requests and answer
+  normally otherwise.
+
+## Deploy (Cloud Run)
+
+Prereqs: `gcloud` + `docker` on PATH. The service runs as the default Cloud Run
+service account, which needs `roles/aiplatform.user` on the project to call
+Gemini via Vertex (grant once if missing).
 
 ```bash
-# a2ui-server (FastAPI + vertexai client)
-cd a2ui-server
-pip install -r requirements.txt
-cp .env.example .env   # (see below)
-
-# a2ui-agent (ADK agent)
+# personal (adk-tut-499512 / us-central1)
 cd a2ui-agent
-uv sync   # or: pip install -e .
+./build.personal.sh      # lint + smoke import
+./deploy.personal.sh     # docker build + push + gcloud run deploy
+
+# office (labs-gcp-msls-16495-1782829337 / us-east1) — same with ./build.sh ./deploy.sh
 ```
 
-Authentication is via **Application Default Credentials (ADC)** — no API keys:
+`deploy.personal.env` sets `PROJECT_ID`, `REGION`, `ARTIFACT_REGISTRY`,
+`SERVICE_NAME`, `APP_URL` (= the public service URL — the card + catalogId
+advertise it), `AGENT_MODEL`, `MODEL_LOCATION`.
+
+Endpoints after deploy:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /catalog.json` | the custom catalog (register renderers under its `catalogId`) |
+| `GET /.well-known/agent-card.json` | A2A card (A2UI extension + `supportedCatalogIds`) |
+| `POST /a2a/a2ui_agent` | A2A JSON-RPC (`message/send`, `message/sendStreaming`) |
+| `GET /client` | the demo client (register + send + render) |
+
+## Try it
 
 ```bash
-gcloud auth application-default login
+# card (shows the A2UI extension + supportedCatalogIds)
+curl https://a2ui-agent-personal-947331501288.us-central1.run.app/.well-known/agent-card.json
+
+# catalog
+curl https://a2ui-agent-personal-947331501288.us-central1.run.app/catalog.json
+
+# text path (no extension)
+curl -X POST https://a2ui-agent-personal-947331501288.us-central1.run.app/a2a/a2ui_agent \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"1","jsonrpc":"2.0","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"text":"what is the capital of France?"}]}}}'
+
+# A2UI path (extension + clientCapabilities) -> application/json+a2ui DataParts
+curl -X POST https://a2ui-agent-personal-947331501288.us-central1.run.app/a2a/a2ui_agent \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"2","jsonrpc":"2.0","method":"message/send","params":{"message":{"messageId":"m2","role":"user","extensions":["https://a2ui.org/a2a-extension/a2ui/v0.9"],"metadata":{"a2uiClientCapabilities":{"supportedCatalogIds":["https://a2ui-agent-personal-947331501288.us-central1.run.app/catalog.json"]}},"parts":[{"text":"show me an A2UI demo with a button and some text"}]}}}'
 ```
 
-## Run (local)
+Open `https://<service>/client` in a browser for the rendered demo.
 
-### a2ui-server
+## Customizing components
 
-```bash
-cd a2ui-server
-uvicorn server:app --reload
-```
+To add/change components, edit `app/catalog.json` (JSON Schema per component:
+`component` const, `required`, props; keep `$defs.anyComponent.oneOf` in sync)
+and add example message lists under `app/examples/`. Redeploy. The client
+renderers in `client/client.js` must implement each component name you add.
 
-Each SSE frame is `data: <json>`; text deltas stream as they are generated
-and the stream ends with `data: [DONE]`.
+## Notes / gotchas
 
-Catalog:
-
-```bash
-curl http://localhost:8000/etcatalog
-```
-
-Chat — the local `/chat` proxies to the Agent Engine identified by
-`AGENT_ENGINE_PROJECT` / `AGENT_ENGINE_LOCATION` / `AGENT_ENGINE_ID` (set them
-to your deployed agent):
-
-```bash
-curl -N -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "what is the capital of France?"}'
-```
-
-### a2ui-agent
-
-```bash
-cd a2ui-agent
-python -c "from agent import agent; print(agent.name)"   # smoke test
-```
-
-## Deploy (two services)
-
-Deploy **a2ui-server first**, then **a2ui-agent** (the agent needs the catalog
-URL + the a2ui-server must be up to answer the catalog tool).
-
-Each service has office/personal variants following the geap-agent convention
-(`./build.sh` then `./deploy.sh`, or `./build.personal.sh` then
-`./deploy.personal.sh`), with config from `a2ui.deploy.env` / `deploy.personal.env`.
-
-### 1. a2ui-server → Cloud Run
-
-1. Edit `a2ui-server/a2ui.deploy.env` (or `deploy.personal.env`): set
-   `PROJECT_ID`, `REGION`, and after first deploy `PROJECT_ID_HASH` (the short
-   hash in the printed service URL) and `CATALOG_URL`.
-2. Build and deploy:
-
-   ```bash
-   cd a2ui-server
-   ./build.sh && ./deploy.sh        # office
-   # or ./build.personal.sh && ./deploy.personal.sh
-   ```
-
-3. Give the **a2ui-agent service account** `roles/run.invoker` on this
-   Cloud Run service (so the agent's catalog tool can call `/etcatalog` with
-   its ID token). agents-cli provisions the engine's service account; find
-   its email with `gcloud iam service-accounts list`. Example:
-
-   ```bash
-   gcloud run services add-iam-policy-binding a2ui-server \
-     --region us-central1 --member serviceAccount:SA_EMAIL \
-     --role roles/run.invoker
-   ```
-
-### 2. a2ui-agent → Agent Engine
-
-Deployment is driven by `agents-cli` (the same flow as geap-agent): the
-manifest `agents-cli-manifest.yaml` defines the Agent Engine target, and
-`deploy.sh`/`deploy.personal.sh` pass the runtime env vars via
-`--update-env-vars`. No service account is passed — agents-cli provisions one
-(Vertex AI User on the project).
-
-1. Edit `a2ui-agent/a2ui.deploy.env` (or `deploy.personal.env`): set
-   `PROJECT_ID`, `REGION`, and `CATALOG_URL` to the deployed a2ui-server URL.
-2. Build and deploy:
-
-   ```bash
-   cd a2ui-agent
-   ./build.sh && ./deploy.sh        # office
-   # or ./build.personal.sh && ./deploy.personal.sh
-   ```
-
-   `build.sh` runs `agents-cli install` + `agents-cli lint`; `deploy.sh` runs
-   `agents-cli deploy --deployment-target agent_runtime` (creates or updates
-   the engine, and pushes the container to Artifact Registry).
-
-3. Give the **a2ui-server service account** `roles/aiplatform.user` on the
-   project so its `/chat` proxy can call the Agent Engine.
-
-### 3. Point the facade at the agent
-
-Set `AGENT_ENGINE_PROJECT` / `AGENT_ENGINE_LOCATION` / `AGENT_ENGINE_ID` (the
-engine's project, region, and `reasoningEngines/<id>` from the deploy output)
-in `a2ui-server`'s env file and redeploy the a2ui-server (or update the env
-vars in the Cloud Run console). Then the public `/chat` endpoint streams from
-your deployed agent.
-
-## IAM / service accounts at a glance
-
-| Direction | Identity | Grant |
-|---|---|---|
-| a2ui-server → Agent Engine (`/chat`) | Cloud Run SA | `roles/aiplatform.user` on the project |
-| Agent Engine → a2ui-server `/etcatalog` (catalog tool) | Agent Engine SA (provisioned by agents-cli) | `roles/run.invoker` on the a2ui-server |
-
-No API-key secrets anywhere — everything rides on ADC + service accounts.
+- `a2ui-agent-sdk` pins `a2a-sdk <0.4` — the A2A serving helpers
+  (`A2AFastAPIApplication`, `DefaultRequestHandler`, old client) come from
+  that line, NOT the planner's `a2a-sdk 1.x`. Keep the pin in `pyproject.toml`.
+- `CatalogConfig.from_path` mangles Windows drive paths — the code uses
+  `FileSystemCatalogProvider` with an absolute path instead.
+- Cloud Run needs `GOOGLE_CLOUD_PROJECT`/`GOOGLE_CLOUD_LOCATION` (injected via
+  `--update-env-vars`) and `APP_URL` as the public https URL (the card/catalog
+  advertise it).
+- Session/memory are in-memory (per instance). Fine for a demo; use managed
+  services for multi-instance production.
 
 ## Project layout
 
 ```
-a2ui-server/         Cloud Run: catalog.json + server.py (catalog + chat SSE proxy)
-  server.py          FastAPI app: GET /etcatalog, POST /chat (SSE)
-  catalog.json       A2UI catalog, official v0.9 JSON Schema format
-  Dockerfile         Container image for Cloud Run (PORT-aware)
+a2ui-agent/            Cloud Run: A2A + A2UI agent (single service)
+  app/
+    agent.py           LlmAgent: google_search + SendA2uiToClientToolset
+    agent_executor.py  A2aAgentExecutor subclass (extension/catalog negotiation)
+    fast_api_app.py    FastAPI: lifespan + A2A routes + /catalog.json + /client
+    app_utils/a2a.py   A2A route attach (A2AFastAPIApplication)
+    catalog.json       Custom catalog (source of truth, served at /catalog.json)
+    examples/          Validated A2UI few-shot examples
+  client/
+    index.html, client.js   Minimal demo client (register + send + render)
+  Dockerfile
   build.sh / deploy.sh            Office: build + deploy to Cloud Run
-  build.personal.sh / deploy.personal.sh  Personal variants
-  a2ui.deploy.env / deploy.personal.env   Deployment config
-a2ui-agent/          Agent Engine: the ADK agent + agents-cli deployment
-  agent.py           ADK LlmAgent: google_search + get_a2ui_catalog (RestApiTool)
-  agents-cli-manifest.yaml  Manifest for agents-cli (Agent Engine target)
-  pyproject.toml     Package metadata (agents-cli installs the agent)
-  build.sh / deploy.sh            Office: build + deploy to Agent Engine
   build.personal.sh / deploy.personal.sh  Personal variants
   a2ui.deploy.env / deploy.personal.env   Deployment config
 ```
 
 ## Deliberately out of scope
 
-No frontend/renderer, no A2UI envelope builder, no validation layer, no DB or
-auth on the a2ui-server (public demo). Session persistence is handled by
-Agent Engine's managed session/memory services. A future client can consume
-`/etcatalog` + `/chat` directly.
+The demo client renders only the 5 catalog components with minimal CSS. No DB,
+auth, or multi-user session persistence (in-memory session/memory per
+instance). It is a public demo, like the financial planner.

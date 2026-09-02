@@ -1,0 +1,51 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "demo_surface",
+      "catalogId": "https://a2ui-agent-personal-947331501288.us-central1.run.app/catalog.json"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "demo_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["header_text", "body_text", "action_button"],
+          "justify": "start",
+          "align": "start"
+        },
+        {
+          "id": "header_text",
+          "component": "Text",
+          "text": "Hello from A2UI",
+          "variant": "h2"
+        },
+        {
+          "id": "body_text",
+          "component": "Text",
+          "text": "This is a demo of an agent-driven UI."
+        },
+        {
+          "id": "action_button",
+          "component": "Button",
+          "child": "action_button_label",
+          "variant": "primary",
+          "action": {
+            "event": {
+              "name": "demo_button_click"
+            }
+          }
+        },
+        {
+          "id": "action_button_label",
+          "component": "Text",
+          "text": "Click Me"
+        }
+      ]
+    }
+  }
+]

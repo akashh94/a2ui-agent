@@ -1,0 +1,74 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "card_surface",
+      "catalogId": "https://a2ui-agent-personal-947331501288.us-central1.run.app/catalog.json"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "card_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Card",
+          "title": "A card with content",
+          "child": "card_content"
+        },
+        {
+          "id": "card_content",
+          "component": "Column",
+          "children": ["card_text", "card_row"],
+          "justify": "start",
+          "align": "stretch"
+        },
+        {
+          "id": "card_text",
+          "component": "Text",
+          "text": "Cards group related content together."
+        },
+        {
+          "id": "card_row",
+          "component": "Row",
+          "children": ["card_button_1", "card_button_2"],
+          "justify": "end",
+          "align": "center"
+        },
+        {
+          "id": "card_button_1",
+          "component": "Button",
+          "child": "card_button_1_label",
+          "variant": "default",
+          "action": {
+            "event": {
+              "name": "card_button_1_click"
+            }
+          }
+        },
+        {
+          "id": "card_button_1_label",
+          "component": "Text",
+          "text": "Cancel"
+        },
+        {
+          "id": "card_button_2",
+          "component": "Button",
+          "child": "card_button_2_label",
+          "variant": "primary",
+          "action": {
+            "event": {
+              "name": "card_button_2_click"
+            }
+          }
+        },
+        {
+          "id": "card_button_2_label",
+          "component": "Text",
+          "text": "Confirm"
+        }
+      ]
+    }
+  }
+]
