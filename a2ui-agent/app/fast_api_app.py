@@ -11,6 +11,7 @@ Planner-style wiring (mirrors akapal-geap-financial-planner):
 """
 
 import contextlib
+import json
 import logging
 import os
 import pathlib
@@ -43,9 +44,7 @@ allow_origin = (
 )
 
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
-APP_URL = os.getenv(
-    "APP_URL", "https://a2ui-agent-personal-947331501288.us-central1.run.app"
-)
+APP_URL = os.getenv("APP_URL", "https://a2ui-agent.example.com")
 
 
 @contextlib.asynccontextmanager
@@ -92,10 +91,15 @@ app.description = "A2UI agent — google_search + A2UI catalog generation over A
 @app.get("/catalog.json")
 def catalog_json() -> Response:
     """Serve the custom catalog so clients register renderers under its
-    catalogId (which is this same URL)."""
+    catalogId (which is this same URL). The $id/catalogId are rewritten to
+    APP_URL so the served catalog matches the card's supportedCatalogIds in
+    any environment (personal/office)."""
     catalog_path = pathlib.Path(AGENT_DIR) / "catalog.json"
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    catalog["$id"] = f"{APP_URL}/catalog.json"
+    catalog["catalogId"] = f"{APP_URL}/catalog.json"
     return Response(
-        content=catalog_path.read_text(encoding="utf-8"),
+        content=json.dumps(catalog, indent=2),
         media_type="application/json",
     )
 

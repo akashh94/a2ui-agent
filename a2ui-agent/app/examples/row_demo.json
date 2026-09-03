@@ -3,7 +3,7 @@
     "version": "v0.9",
     "createSurface": {
       "surfaceId": "row_demo_surface",
-      "catalogId": "https://a2ui-agent-personal-947331501288.us-central1.run.app/catalog.json"
+      "catalogId": "https://a2ui-agent/catalog.json"
     }
   },
   {

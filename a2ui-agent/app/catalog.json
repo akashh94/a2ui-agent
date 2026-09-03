@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://a2ui-agent-personal-947331501288.us-central1.run.app/catalog.json",
+  "$id": "https://a2ui-agent/catalog.json",
   "title": "A2UI Agent Demo Catalog",
   "description": "A minimal custom catalog for the a2ui-agent demo: Text, Button, Row, Column, Card. The agent generates A2UI messages against this catalog; the client renders it by registering renderers under catalogId.",
-  "catalogId": "https://a2ui-agent-personal-947331501288.us-central1.run.app/catalog.json",
+  "catalogId": "https://a2ui-agent/catalog.json",
   "components": {
     "Text": {
       "type": "object",

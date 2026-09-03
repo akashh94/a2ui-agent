@@ -24,7 +24,7 @@ import pathlib
 
 from a2ui.inference_formats.direct_json import DirectJsonFormat
 from a2ui.schema.catalog import A2uiCatalog, CatalogConfig
-from a2ui.schema.catalog_provider import FileSystemCatalogProvider
+from a2ui.schema.catalog_provider import A2uiCatalogProvider, FileSystemCatalogProvider
 from a2ui.schema.common_modifiers import remove_strict_validation
 from a2ui.schema.constants import VERSION_0_9
 from google.adk.agents import LlmAgent
@@ -37,12 +37,28 @@ from google.adk.tools.google_search_agent_tool import (
 
 _APP_DIR = pathlib.Path(__file__).resolve().parent
 
-# Public catalogId — the same URL /catalog.json is served at. Kept in sync
-# with app/catalog.json via CATALOG_URI (APP_URL + "/catalog.json").
-CATALOG_URI = (
-    os.getenv("APP_URL", "https://a2ui-agent-personal-947331501288.us-central1.run.app")
-    + "/catalog.json"
-)
+# Public catalogId — the same URL /catalog.json is served at. Derived from
+# APP_URL so the same image works for any environment (personal/office).
+# The fallback is a neutral placeholder; deployments always set APP_URL.
+CATALOG_URI = os.getenv("APP_URL", "https://a2ui-agent.example.com") + "/catalog.json"
+
+
+class _CatalogWithRuntimeId(A2uiCatalogProvider):
+    """Loads app/catalog.json and rewrites its $id / catalogId to the
+    environment's CATALOG_URI (derived from APP_URL), so the card's
+    supportedCatalogIds and the served /catalog.json always point at the
+    public URL of the deployed service."""
+
+    def __init__(self, path: pathlib.Path, catalog_uri: str):
+        self._provider = FileSystemCatalogProvider(str(path))
+        self._catalog_uri = catalog_uri
+
+    def load(self) -> dict:
+        schema = self._provider.load()
+        schema["$id"] = self._catalog_uri
+        schema["catalogId"] = self._catalog_uri
+        return schema
+
 
 ROLE_DESCRIPTION = (
     "You are a helpful assistant. When the user asks you to show UI, a demo, "
@@ -88,15 +104,17 @@ def _build_model() -> Gemini:
 def build_inference_format() -> DirectJsonFormat:
     """The DirectJsonFormat over the custom catalog (app/catalog.json).
 
-    Uses FileSystemCatalogProvider directly (CatalogConfig.from_path mangles
-    Windows drive paths via os.path.abspath on the file URI).
+    Uses a provider that rewrites the catalog's $id/catalogId to CATALOG_URI
+    (from APP_URL) so supportedCatalogIds matches the deployed service URL.
+    (CatalogConfig.from_path mangles Windows drive paths via os.path.abspath
+    on the file URI, so we construct the provider directly.)
     """
     return DirectJsonFormat(
         version=VERSION_0_9,
         catalogs=[
             CatalogConfig(
                 name="a2ui-demo",
-                provider=FileSystemCatalogProvider(str(_APP_DIR / "catalog.json")),
+                provider=_CatalogWithRuntimeId(_APP_DIR / "catalog.json", CATALOG_URI),
                 examples_path=str(_APP_DIR / "examples"),
             ),
         ],
