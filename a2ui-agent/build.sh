@@ -20,5 +20,8 @@ uv run ruff format . --check
 uv run codespell
 uv run ty check .
 
-# Smoke import (builds the agent + inference format).
-uv run python -c "import app.fast_api_app; import app.agent; print('imports OK')"
+# Smoke import (builds the agent + inference format). Import only app.agent,
+# not app.fast_api_app: the FastAPI factory (get_fast_api_app) requires
+# GOOGLE_CLOUD_PROJECT/GOOGLE_CLOUD_LOCATION at import time, which are
+# runtime/deploy concerns, not build-time ones.
+uv run python -c "import app.agent; print('imports OK')"
