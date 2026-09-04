@@ -86,6 +86,15 @@ WORKFLOW_DESCRIPTION = """
    list as the a2ui_json argument, using the schema and examples injected
    into the request. If the tool reports an error, fix the payload and call
    it again.
+
+CRITICAL - how to call the tool:
+- send_a2ui_json_to_client is a REAL tool/function available to you. To use
+  it you MUST emit a native function call named send_a2ui_json_to_client
+  with the argument a2ui_json set to the JSON string.
+- NEVER write Python code, NEVER wrap the call in print(...), code fences,
+  backticks, or markdown. NEVER describe the call in prose. Outputting code
+  or text instead of a real function call is an ERROR and breaks the demo.
+- The A2UI payload only reaches the user when you actually invoke the tool.
 """
 
 
