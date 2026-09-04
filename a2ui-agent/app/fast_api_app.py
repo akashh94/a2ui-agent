@@ -7,7 +7,9 @@ Planner-style wiring (mirrors akapal-geap-financial-planner):
   under the catalogId the agent advertises.
 - Env: GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION (required by
   get_fast_api_app on Cloud Run), APP_URL (public https URL so the card's
-  advertised rpc_url / catalogId are correct), AGENT_MODEL / MODEL_LOCATION.
+  advertised rpc_url / catalogId are correct), AGENT_MODEL / MODEL_LOCATION,
+  ALLOW_ORIGINS (comma-separated origins allowed to call the A2A/catalog
+  endpoints cross-origin — e.g. the separately-deployed a2ui-client).
 """
 
 import contextlib
@@ -101,22 +103,6 @@ def catalog_json() -> Response:
     return Response(
         content=json.dumps(catalog, indent=2),
         media_type="application/json",
-    )
-
-
-# Serve the minimal demo client (fetches card/catalog, sends A2A, renders).
-_CLIENT_DIR = pathlib.Path(AGENT_DIR).parent / "client"
-if _CLIENT_DIR.is_dir():
-    from fastapi.staticfiles import StaticFiles
-
-    app.mount("/client", StaticFiles(directory=str(_CLIENT_DIR)), name="client")
-
-
-@app.get("/client")
-def client_redirect() -> Response:
-    return Response(
-        status_code=302,
-        headers={"Location": "/client/index.html"},
     )
 
 

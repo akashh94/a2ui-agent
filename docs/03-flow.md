@@ -14,12 +14,14 @@ in the examples; replace it with your deployed URL.
 
 ## 1. Page load / discovery
 
-When you open `https://<service>/client`:
+Open the deployed **a2ui-client** page (a separate repo/service) — by default
+it points at this agent, or you can point it at any agent with
+`?agent=<agent-url>`:
 
 1. The browser loads `index.html` + `client.js` (static files served by the
-   same FastAPI app).
-2. `client.js` calls **`GET /.well-known/agent-card.json`** and receives the
-   agent card:
+   a2ui-client service).
+2. `client.js` calls the agent's **`GET /.well-known/agent-card.json`** and
+   receives the agent card:
 
 ```json
 {
@@ -80,7 +82,7 @@ POST /a2a/a2ui_agent
 }
 ```
 
-> In the bundled demo client the A2UI extension is always attached (the page
+> In the a2ui-client demo the A2UI extension is always attached (the page
 > *can* render), but the executor logic is the same: the **model gate** decides
 > a UI is not needed, so the answer is text.
 

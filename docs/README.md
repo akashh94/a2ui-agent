@@ -19,9 +19,11 @@ This repo runs **one Cloud Run service** that contains:
 - an **AI agent** (Google's ADK framework + Gemini) that can answer questions,
   and
 - a **catalog** describing a small set of UI building blocks (Text, Button,
-  Row, Column, Card), and
-- a **demo web page** (the "client") that talks to the agent and **renders
-  UIs the agent generates**.
+  Row, Column, Card).
+
+A separate repo, **a2ui-client**, holds the **demo web page** ("client") that
+talks to this agent and **renders the UIs the agent generates**. It is
+deployed to its own Cloud Run service and points at this agent's URL.
 
 The whole point: a user says "show me a demo with a button and text", the
 agent **builds a UI description in a standard format called A2UI**, and the
@@ -36,25 +38,22 @@ or agent can interoperate.
 
 | Endpoint | Purpose |
 |---|---|
-| `https://<service-url>/catalog.json` | The catalog (the list of allowed UI components) |
-| `https://<service-url>/.well-known/agent-card.json` | The agent's "business card" (what it can do) |
-| `https://<service-url>/a2a/a2ui_agent` | The agent's A2A API (send it a message) |
-| `https://<service-url>/client` | The demo client page (open in a browser) |
+| `https://<agent-url>/catalog.json` | The catalog (the list of allowed UI components) |
+| `https://<agent-url>/.well-known/agent-card.json` | The agent's "business card" (what it can do) |
+| `https://<agent-url>/a2a/a2ui_agent` | The agent's A2A API (send it a message) |
+
+The demo client page is a **separate repo** (`a2ui-client`), deployed to its
+own Cloud Run service; point it at the agent with `?agent=<agent-url>`.
 
 ## Repository layout (top level)
 
 ```
-a2ui-agent/     the whole project (this repo)
-├── a2ui-agent/     the deployable service (the thing on Cloud Run)
-│   ├── app/        the Python service code + catalog
-│   ├── client/     the demo browser page (static HTML/JS)
-│   └── *.sh        build/deploy scripts
-├── a2ui-server/    (legacy) the OLD architecture — no longer used
+a2ui-agent/     this repo: the deployable agent service
+├── a2ui-agent/     the Cloud Run service (Python app + catalog)
+│   └── app/        the service code + catalog
 ├── docs/           these documents
-├── README.md       quick start
-└── SESSION_HANDOFF.md  session notes (project history)
-```
+└── README.md       quick start
 
-> Tip: ignore the `a2ui-server/` folder unless you are reading history. It was
-> the previous design (a catalog + chat proxy in front of a Vertex AI Agent
-> Engine). The new design is one self-contained A2A service.
+a2ui-client/    SEPARATE repo: the demo browser page (static HTML/JS),
+                deployed to its own Cloud Run service
+```

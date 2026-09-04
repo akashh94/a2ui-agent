@@ -161,7 +161,7 @@ To add, say, a `Rating` component (1–5 stars):
    message list that includes a `Rating` — it is validated at startup, so it
    doubles as a test that your schema is right.
 
-4. **Add a renderer in `client/client.js`**:
+4. **Add a renderer in the a2ui-client repo's `client.js`**:
 
 ```js
 Rating: (props) => {
@@ -172,7 +172,8 @@ Rating: (props) => {
 },
 ```
 
-5. Redeploy (`./build.personal.sh && ./deploy.personal.sh`) and try it.
+5. Redeploy this agent (`./build.personal.sh && ./deploy.personal.sh`) and
+   the client, then try it.
 
 ## Examples (`app/examples/`)
 

@@ -4,7 +4,6 @@ WORKDIR /app
 
 COPY pyproject.toml .
 COPY app/ app/
-COPY client/ client/
 
 RUN pip install --no-cache-dir .
 

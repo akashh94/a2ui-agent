@@ -62,7 +62,7 @@ order you meet them.
 | `app/agent_executor.py` | Extension/catalog negotiation + event conversion |
 | `app/catalog.json` | The custom catalog (source of truth) |
 | `app/examples/*.json` | Validated few-shot A2UI examples |
-| `client/index.html` + `client.js` | Demo client (renders the UIs) |
+| (separate repo) `a2ui-client/index.html` + `client.js` | Demo client (renders the UIs) |
 | `deploy.personal.sh` | Build + push + deploy to Cloud Run (personal env) |
 
 Next: [06-troubleshooting.md](06-troubleshooting.md).

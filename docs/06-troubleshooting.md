@@ -113,24 +113,27 @@ capabilities.
 
 Open the browser dev tools (F12) → Console/Network:
 
-- Confirm `/.well-known/agent-card.json` and `/catalog.json` loaded (200).
-- Confirm the POST to `/a2a/a2ui_agent` returns 200 and the JSON contains
-  `result.artifacts[].parts[]` with `kind: "data"`.
+- Confirm the **agent's** `/.well-known/agent-card.json` and `/catalog.json`
+  loaded (200) — from the client's origin, not the agent's.
+- Confirm the POST to the agent's `/a2a/a2ui_agent` returns 200 and the JSON
+  contains `result.artifacts[].parts[]` with `kind: "data"`.
+- If the console shows a **CORS error**, the agent's `ALLOW_ORIGINS` does not
+  include the client's origin — add it and redeploy the agent.
 - If the console shows a JS error (e.g. `crypto.randomUUID` not available),
   use a current browser (randomUUID needs a secure context / modern Chrome,
   Edge, Firefox, Safari).
 
-### Client /catalog.json is 404 in the browser but the file exists locally
+### Client gets 404 / CORS errors reaching the agent
 
-Make sure the image contains `client/` and `app/`:
+The client is a **separate service**; it must reach the agent cross-origin:
 
-```dockerfile
-COPY app/ app/
-COPY client/ client/
-```
-
-The Dockerfile was updated to copy `client/` — if you reverted it, `/client`
-mounts but files 404.
+- The client's `AGENT_URL` (or `?agent=`) must point at the agent's public
+  URL. Check the client's Network tab for the actual request URL.
+- The agent must allow the client's origin: set `ALLOW_ORIGINS` in the
+  agent's deploy env to the client's origin and redeploy the agent.
+- The agent serves `/catalog.json`, `/.well-known/agent-card.json`, and
+  `/a2a/a2ui_agent` — it does **not** serve the client page (that's the
+  a2ui-client repo).
 
 ## Code / dependency gotchas (you probably won't hit these, but…)
 

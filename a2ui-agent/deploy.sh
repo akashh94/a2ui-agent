@@ -34,7 +34,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --port 8080 \
   --min-instances 1 \
   --max-instances 1 \
-  --update-env-vars "AGENT_MODEL=${AGENT_MODEL},MODEL_LOCATION=${MODEL_LOCATION},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},APP_URL=${APP_URL}"
+  --update-env-vars "AGENT_MODEL=${AGENT_MODEL},MODEL_LOCATION=${MODEL_LOCATION},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},APP_URL=${APP_URL},ALLOW_ORIGINS=${ALLOW_ORIGINS}"
 
 SERVICE_URL="https://${SERVICE_NAME}-$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)').${REGION}.run.app"
 echo "Deployed: ${SERVICE_URL}"

@@ -18,13 +18,13 @@ in that catalog**. Without the extension, it answers in plain text via
 `google_search`.
 
 ```
-Browser demo client (client/)           a2ui-agent (Cloud Run)
-   │  GET /catalog.json  ────────────►  GET  /catalog.json   (custom catalog JSON)
-   │  GET /.well-known/agent-card.json ► GET /.well-known/agent-card.json
-   │                                     (card advertises A2UI ext + catalogId)
-   │  POST /a2a/a2ui_agent  ◄────────►  POST /a2a/a2ui_agent
-   │   JSON-RPC message/send             (executor negotiates extension/catalog,
-   │   extensions:[a2ui v0.9]              runs LlmAgent, returns A2A parts)
+a2ui-client (separate repo, own Cloud Run)     a2ui-agent (Cloud Run)
+   │  GET /catalog.json  ──────────────────►  GET  /catalog.json   (custom catalog JSON)
+   │  GET /.well-known/agent-card.json ─────► GET /.well-known/agent-card.json
+   │                                          (card advertises A2UI ext + catalogId)
+   │  POST /a2a/a2ui_agent  ◄──────────────►  POST /a2a/a2ui_agent
+   │   JSON-RPC message/send                  (executor negotiates extension/catalog,
+   │   extensions:[a2ui v0.9]                    runs LlmAgent, returns A2A parts)
    ▼   clientCapabilities
   renders DataParts (createSurface / updateComponents)
 ```
@@ -53,12 +53,14 @@ Browser demo client (client/)           a2ui-agent (Cloud Run)
   `/.well-known/agent-card.json`, JSON-RPC at `/a2a/a2ui_agent`
   (`A2AFastAPIApplication`).
 - **`a2ui-agent/app/fast_api_app.py`** — FastAPI app (planner-style): lifespan
-  builds the agent + `Runner` and attaches A2A routes; serves `/catalog.json`,
-  the demo client at `/client`, and `/`.
-- **`a2ui-agent/client/`** — a minimal **demo client**: a single HTML page that
-  fetches the card + catalog, registers the 5 components as renderers, sends
-  A2A `message/send` with the A2UI extension, and renders the returned
-  `DataPart`s.
+  builds the agent + `Runner` and attaches A2A routes; serves `/catalog.json`
+  and `/`. (The demo client is no longer served here — see **a2ui-client**.)
+- **a2ui-client (separate repo)** — a minimal **demo client** (static HTML/JS,
+  deployed to its own Cloud Run service). It fetches the card + catalog,
+  registers the 5 components as renderers, sends A2A `message/send` with the
+  A2UI extension, and renders the returned `DataPart`s. The agent's base URL
+  is configurable (`AGENT_URL` / `?agent=`); the agent must list the client's
+  origin in `ALLOW_ORIGINS`.
 
 ## How the agent is constrained to the catalog
 
@@ -98,7 +100,9 @@ cd a2ui-agent
 
 `deploy.personal.env` sets `PROJECT_ID`, `REGION`, `ARTIFACT_REGISTRY`,
 `SERVICE_NAME`, `APP_URL` (= the public service URL — the card + catalogId
-advertise it), `AGENT_MODEL`, `MODEL_LOCATION`.
+advertise it), `AGENT_MODEL`, `MODEL_LOCATION`, `ALLOW_ORIGINS` (the
+separately-deployed a2ui-client's origin, so the browser client can call the
+agent cross-origin).
 
 Endpoints after deploy:
 
@@ -107,7 +111,6 @@ Endpoints after deploy:
 | `GET /catalog.json` | the custom catalog (register renderers under its `catalogId`) |
 | `GET /.well-known/agent-card.json` | A2A card (A2UI extension + `supportedCatalogIds`) |
 | `POST /a2a/a2ui_agent` | A2A JSON-RPC (`message/send`, `message/sendStreaming`) |
-| `GET /client` | the demo client (register + send + render) |
 
 ## Try it
 
@@ -129,14 +132,17 @@ curl -X POST https://a2ui-agent-personal-947331501288.us-central1.run.app/a2a/a2
   -d '{"id":"2","jsonrpc":"2.0","method":"message/send","params":{"message":{"messageId":"m2","role":"user","extensions":["https://a2ui.org/a2a-extension/a2ui/v0.9"],"metadata":{"a2uiClientCapabilities":{"supportedCatalogIds":["https://a2ui-agent-personal-947331501288.us-central1.run.app/catalog.json"]}},"parts":[{"text":"show me an A2UI demo with a button and some text"}]}}}'
 ```
 
-Open `https://<service>/client` in a browser for the rendered demo.
+Open the **a2ui-client** repo's deployed page in a browser for the rendered
+demo, or run its static files locally and point them at this agent with
+`?agent=<this service URL>`.
 
 ## Customizing components
 
 To add/change components, edit `app/catalog.json` (JSON Schema per component:
 `component` const, `required`, props; keep `$defs.anyComponent.oneOf` in sync)
-and add example message lists under `app/examples/`. Redeploy. The client
-renderers in `client/client.js` must implement each component name you add.
+and add example message lists under `app/examples/`. Redeploy. The renderers
+in the a2ui-client repo's `client.js` must implement each component name you
+add.
 
 ## Notes / gotchas
 
@@ -154,24 +160,30 @@ renderers in `client/client.js` must implement each component name you add.
 ## Project layout
 
 ```
-a2ui-agent/            Cloud Run: A2A + A2UI agent (single service)
-  app/
-    agent.py           LlmAgent: google_search + SendA2uiToClientToolset
-    agent_executor.py  A2aAgentExecutor subclass (extension/catalog negotiation)
-    fast_api_app.py    FastAPI: lifespan + A2A routes + /catalog.json + /client
-    app_utils/a2a.py   A2A route attach (A2AFastAPIApplication)
-    catalog.json       Custom catalog (source of truth, served at /catalog.json)
-    examples/          Validated A2UI few-shot examples
-  client/
-    index.html, client.js   Minimal demo client (register + send + render)
-  Dockerfile
-  build.sh / deploy.sh            Office: build + deploy to Cloud Run
-  build.personal.sh / deploy.personal.sh  Personal variants
-  a2ui.deploy.env / deploy.personal.env   Deployment config
+a2ui-agent/            the whole project (this repo)
+├── a2ui-agent/        Cloud Run: A2A + A2UI agent (single service)
+│   ├── app/           agent code + catalog
+│   │   ├── agent.py           LlmAgent: google_search + SendA2uiToClientToolset
+│   │   ├── agent_executor.py  A2aAgentExecutor subclass (extension/catalog negotiation)
+│   │   ├── fast_api_app.py    FastAPI: lifespan + A2A routes + /catalog.json
+│   │   ├── app_utils/a2a.py   A2A route attach (A2AFastAPIApplication)
+│   │   ├── catalog.json       Custom catalog (source of truth, served at /catalog.json)
+│   │   └── examples/          Validated A2UI few-shot examples
+│   ├── Dockerfile
+│   ├── build.sh / deploy.sh            Office: build + deploy to Cloud Run
+│   ├── build.personal.sh / deploy.personal.sh  Personal variants
+│   └── a2ui.deploy.env / deploy.personal.env   Deployment config
+├── docs/              beginner docs (see the reading order above)
+└── README.md          this file
+
+a2ui-client/           (SEPARATE repo) the browser demo client, deployed to
+                       its own Cloud Run service; points at this agent via
+                       AGENT_URL / ?agent=
 ```
 
 ## Deliberately out of scope
 
-The demo client renders only the 5 catalog components with minimal CSS. No DB,
-auth, or multi-user session persistence (in-memory session/memory per
-instance). It is a public demo, like the financial planner.
+The a2ui-client demo renders only the 5 catalog components with minimal CSS.
+This agent has no DB, auth, or multi-user session persistence (in-memory
+session/memory per instance). It is a public demo, like the financial
+planner.

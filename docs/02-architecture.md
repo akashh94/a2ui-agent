@@ -3,25 +3,25 @@
 ## Big picture
 
 ```
-┌─────────────────────────── Browser ───────────────────────────┐
-│                                                               │
-│   client/  (demo web page served by the same service)         │
-│     index.html + client.js                                     │
-│       • fetches the agent card  (what can the agent do?)       │
-│       • fetches the catalog    (which components can render?)  │
-│       • registers the 5 components as "renderers"              │
-│       • sends A2A messages (with the A2UI extension)           │
-│       • renders returned A2UI DataParts into the page          │
-└──────────────────────────────┬────────────────────────────────┘
-                               │ HTTPS (JSON-RPC + SSE)
+┌────────────── Browser (serves the a2ui-client repo) ─────────────┐
+│                                                                  │
+│   a2ui-client/  (SEPARATE repo, own Cloud Run service)           │
+│     index.html + client.js                                        │
+│       • fetches the agent card  (what can the agent do?)          │
+│       • fetches the catalog    (which components can render?)     │
+│       • registers the 5 components as "renderers"                 │
+│       • sends A2A messages (with the A2UI extension)              │
+│       • renders returned A2UI DataParts into the page             │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │ HTTPS (JSON-RPC + SSE) — cross-origin,
+                               │ allowed by the agent's ALLOW_ORIGINS
                                ▼
 ┌──────────────────── Cloud Run: the a2ui-agent service ───────────────┐
 │                                                                      │
 │  FastAPI app (app/fast_api_app.py)                                   │
 │   ├─ GET  /catalog.json                 → the catalog JSON           │
 │   ├─ GET  /.well-known/agent-card.json  → the agent card            │
-│   ├─ POST /a2a/a2ui_agent               → A2A JSON-RPC              │
-│   └─ GET  /client                       → the demo client page      │
+│   └─ POST /a2a/a2ui_agent               → A2A JSON-RPC              │
 │                                                                      │
 │  A2A layer (app/app_utils/a2a.py)                                    │
 │   └─ builds AgentCard, wires JSON-RPC to the executor               │
@@ -45,17 +45,19 @@
 
 ## The four roles (get these straight first)
 
-| Role | What it is | In this repo |
+| Role | What it is | Where |
 |---|---|---|
 | **Agent** | The AI that decides what to say / what UI to build | `app/agent.py` (an ADK `LlmAgent`) |
 | **Catalog** | A JSON schema whitelisting UI components + their properties | `app/catalog.json` |
 | **Server / host** | The process that exposes the agent over HTTP and serves the card + catalog | `app/fast_api_app.py` + `app/app_utils/a2a.py` |
-| **Client** | A program (browser page) that can render the catalog's components | `client/` |
+| **Client** | A program (browser page) that can render the catalog's components | the separate **a2ui-client** repo |
 
 > Confusion alert: "server" here is NOT a separate machine from the agent.
 > It is the FastAPI container that *hosts* the agent and exposes it over A2A.
-> The "client" is the browser page that renders UI. A human user talks to the
-> client; the client talks to the server/agent.
+> The "client" is the browser page that renders UI — it lives in its own repo
+> (`a2ui-client`) and its own Cloud Run service, and talks to the agent
+> cross-origin. A human user talks to the client; the client talks to the
+> server/agent.
 
 ## Files, one by one
 
@@ -66,11 +68,14 @@
   1. builds the agent (`app.agent.build_agent()`),
   2. wraps it in an ADK `Runner` with in-memory session/artifact/memory,
   3. attaches the A2A routes (`attach_a2a_routes`).
-- Serves `GET /catalog.json` (reads the file), mounts the demo client at
-  `/client`, and answers `/` with pointers.
+- Serves `GET /catalog.json` (reads the file) and answers `/` with pointers.
+  The demo client is **not** served here — it lives in the separate
+  a2ui-client repo.
 
 Env vars it needs: `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `APP_URL`
-(the public https URL — used to build card URLs and the catalogId).
+(the public https URL — used to build card URLs and the catalogId),
+`ALLOW_ORIGINS` (the a2ui-client's origin, so the browser can call this agent
+cross-origin).
 
 ### `app/app_utils/a2a.py` — A2A route attachment
 
@@ -145,9 +150,11 @@ demo, a row of buttons). Loaded and **validated** at startup; injected into
 the LLM request as examples when A2UI is active. This is how the model learns
 the *shape* of good output without hallucinating.
 
-### `client/` — the demo client (renders the UI)
+### a2ui-client (SEPARATE repo) — the demo client (renders the UI)
 
-`index.html` + `client.js`, served statically at `/client`.
+`index.html` + `client.js`, pure static files, deployed to its own Cloud Run
+service. Its agent base URL is configurable (`AGENT_URL` in `client.js`, or
+`?agent=<agent-url>` per page).
 
 - On load: fetches the card, confirms the A2UI extension, fetches
   `/catalog.json`, and "registers" a renderer function for each component
@@ -169,16 +176,17 @@ the *shape* of good output without hallucinating.
   import (via `uv`).
 - `deploy.personal.sh` / `deploy.sh` — `docker build` + `gcloud run deploy`
   with env vars (`AGENT_MODEL`, `MODEL_LOCATION`, `GOOGLE_CLOUD_PROJECT`,
-  `GOOGLE_CLOUD_LOCATION`, `APP_URL`).
+  `GOOGLE_CLOUD_LOCATION`, `APP_URL`, `ALLOW_ORIGINS`).
 - `deploy.personal.env` / `a2ui.deploy.env` — the actual values (personal vs
-  office project/region/service name).
+  office project/region/service name, plus the a2ui-client origin for CORS).
 
 ## What is NOT here (deliberately)
 
 - No database, no auth, no multi-user sessions (in-memory only; fine for a
   demo/single instance).
-- No full-featured renderer like `@a2ui/lit` — the demo client renders only
-  the 5 catalog components with minimal CSS.
+- No client code — the demo client lives in the separate **a2ui-client** repo
+  and renders only the 5 catalog components with minimal CSS (no full-featured
+  renderer like `@a2ui/lit`).
 
 ## Data flow in one sentence
 
