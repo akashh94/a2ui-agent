@@ -100,6 +100,15 @@ class A2uiAgentExecutor(A2aAgentExecutor):
             )
             examples = self._inference_format.load_examples(a2ui_catalog, validate=True)
 
+            # The example files hardcode the placeholder catalogId
+            # ("https://a2ui-agent/catalog.json"). Rewrite it to the selected
+            # catalog's real id so the model echoes the deployed URL, matching
+            # what the client registered and what /catalog.json serves.
+            if examples:
+                examples = examples.replace(
+                    "https://a2ui-agent/catalog.json", a2ui_catalog.catalog_id
+                )
+
             # Store into session state via an event (same as rizzcharts), so
             # the SendA2uiToClientToolset providers and A2uiEventConverter see
             # it per-session.
