@@ -199,3 +199,38 @@ No frontend/renderer, no A2UI envelope builder, no validation layer, no DB or
 auth on the a2ui-server (public demo). Session persistence is handled by
 Agent Engine's managed session/memory services. A future client can consume
 `/etcatalog` + `/chat` directly.
+Q1: The Left-Prefix Rule & B-Tree Mechanics
+Question: "You have a massive users table with a composite index on (last_name, first_name). You write the following query: SELECT * FROM users WHERE first_name = 'Alice';. 
+The database is slow and execution plans show a Full Table Scan. Why didn't it use the index, and how do you fix it?"
+
+First Principles Focus: B-Tree traversal and composite index structuring.
+
+Expected Answer: A composite index is structured hierarchically. The B-Tree is sorted first by last_name, and then by first_name within those last names. 
+Searching for just first_name is like looking for someone named "Alice" in a phone book without knowing their last name—you still have to read the whole book.
+
+The Fix: Create a separate index on first_name, or if the query frequently filters by both, ensure the WHERE clause includes the leading column of the index (last_name).
+
+========================================================================================================================================================================================
+
+Question: "Look at these two transactions executing concurrently in your backend. Occasionally, both transactions fail. What fundamental database concept is causing the crash, and how do you resolve it architecturally?"
+
+BEGIN;
+UPDATE inventory SET stock = stock - 1 WHERE item_id = 100;
+UPDATE users SET balance = balance - 50 WHERE user_id = 5;
+COMMIT;
+
+BEGIN;
+UPDATE users SET balance = balance + 50 WHERE user_id = 5;
+UPDATE inventory SET stock = stock + 1 WHERE item_id = 100;
+COMMIT;
+
+First Principles Focus: Lock acquisition, isolation levels, and Deadlocks.
+
+Expected Answer: This is a classic Deadlock. Transaction A locks the inventory row and waits for the users row. 
+Transaction B locks the users row and waits for the inventory row. They wait on each other infinitely until the database's deadlock detector kills one.
+
+The Fix: Enforce a strict lock acquisition order across the entire application. For example, 
+always update tables in alphabetical order (always lock inventory before users), ensuring threads queue sequentially rather than deadlocking.
+
+========================================================================================================================================================================================
+
