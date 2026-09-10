@@ -528,3 +528,75 @@ D:/adk_tut/runner_and_session
 
    
   
+
+
+# def merge(final_arr, si, mid, ei):
+
+#     arr = final_arr.copy()
+#     i = si #iterator for left
+#     j = mid+1 #iterator for right
+#     k = si
+
+#     while(i <= mid and j <= ei):
+#         if arr[i] < arr[j]:
+#             final_arr[k] = arr[i]
+#             i+=1
+#         else:
+#             final_arr[k] = arr[j]
+#             j+=1
+#         k+=1
+#     while(i<=mid):
+#         final_arr[k] = arr[i]
+#         i+=1
+#         k+=1
+#     while(j<=ei):
+#         final_arr[k] = arr[j]
+#         j+=1
+#         k+=1
+
+
+# def merge_sort(arr, si, ei):
+#     if si == ei:
+#         return
+
+#     mid = int(si + (ei - si)/2)
+#     merge_sort(arr, si, mid)
+#     merge_sort(arr, mid+1, ei)
+#     merge(arr, si, mid, ei)
+
+def merge(l, r, mid, arr):
+    left = arr[l:mid+1]
+    right = arr[mid+1:r+1]
+    cur = l
+    i=0
+    j=0
+    while(i < len(left) and j < len(right)):
+        if left[i] < right[j]:
+            arr[cur] = left[i]
+            i+=1
+        else:
+            arr[cur] = right[j]
+            j+=1
+        cur+=1
+
+    while(i < len(left)):
+        arr[cur] = left[i]
+        i+=1
+        cur+=1
+    while(j < len(right)):
+        arr[cur] = right[j]
+        j+=1
+        cur+=1
+
+def merge_sort(l, r, arr):
+    if l>=r:
+        return
+    
+    mid = l+int((r-l)/2)
+    merge_sort(l, mid, arr)
+    merge_sort(mid+1, r, arr)
+    merge(l, r, mid, arr)
+
+arr = [2,1,8,3,6,5]
+print(merge_sort( 0, 5, arr))
+print(arr)
