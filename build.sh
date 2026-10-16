@@ -1,27 +1,35 @@
 #!/usr/bin/env bash
 #
-# Build (lint + smoke import) for the a2ui-agent A2A service — office env.
+# Build (Cloud Build) for the a2ui-agent A2A service — office env.
+# Builds and pushes the container image to Artifact Registry; no local Docker
+# required. Deploy it with ./deploy.sh.
+
 set -euo pipefail
 
+# Resolve this project's root.
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
-unset VIRTUAL_ENV
+# Office environment config (self-contained): PROJECT_ID / REGION /
+# ARTIFACT_REGISTRY / ARTIFACT_REGION / SERVICE_NAME / APP_URL / ALLOW_ORIGINS
+# all come from a2ui.deploy.env — the single source of truth for the office
+# deployment.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/a2ui.deploy.env"
 
-if ! command -v uv >/dev/null 2>&1; then
-  echo "uv not found; installing..."
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  export PATH="$HOME/.local/bin:$PATH"
-fi
+gcloud config set project "$PROJECT_ID"
 
-uv sync --dev --extra lint
-uv run ruff check .
-uv run ruff format . --check
-uv run codespell
-uv run ty check .
+# Ensure the Artifact Registry repository exists in the deploy region.
+echo "Ensuring Artifact Registry repository '${ARTIFACT_REGISTRY}' in ${ARTIFACT_REGION}..."
+gcloud artifacts repositories describe "$ARTIFACT_REGISTRY" \
+  --location "$ARTIFACT_REGION" >/dev/null 2>&1 || {
+  echo "Repository not found; creating..."
+  gcloud artifacts repositories create "$ARTIFACT_REGISTRY" \
+    --repository-format docker \
+    --location "$ARTIFACT_REGION"
+}
 
-# Smoke import (builds the agent + inference format). Import only app.agent,
-# not app.fast_api_app: the FastAPI factory (get_fast_api_app) requires
-# GOOGLE_CLOUD_PROJECT/GOOGLE_CLOUD_LOCATION at import time, which are
-# runtime/deploy concerns, not build-time ones.
-uv run python -c "import app.agent; print('imports OK')"
+# Build + push the agent image to the office project's Artifact Registry.
+IMAGE="${ARTIFACT_REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REGISTRY}/a2ui-agent-office:$(git rev-parse --short HEAD)"
+echo "$IMAGE"
+gcloud builds submit . --tag "$IMAGE" --project "$PROJECT_ID"

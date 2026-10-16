@@ -10,3 +10,8 @@ venv/
 .mypy_cache/
 .ruff_cache/
 .git/
+
+# Personal deploy config — never upload to Cloud Build.
+deploy.personal.env
+deploy.personal.sh
+build.personal.sh
