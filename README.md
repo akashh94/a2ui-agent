@@ -31,28 +31,28 @@ a2ui-client (separate repo, own Cloud Run)     a2ui-agent (Cloud Run)
 
 ## What each piece does
 
-- **`a2ui-agent/app/agent.py`** — the ADK `LlmAgent`. Tools:
+- **`app/agent.py`** — the ADK `LlmAgent`. Tools:
   - `google_search` (sub-agent) for general/fact questions — the plain-text path.
   - `SendA2uiToClientToolset` — the A2UI tool path. Enabled only when the A2UI
     extension was negotiated for the session; its schema/examples come from
     session state (populated by the executor). The model calls
     `send_a2ui_json_to_client` with the A2UI message list.
-- **`a2ui-agent/app/catalog.json`** — **the custom catalog** (single source of
+- **`app/catalog.json`** — **the custom catalog** (single source of
   truth). `catalogId` = `https://<APP_URL>/catalog.json`. Components: Text,
   Button, Row, Column, Card. Loaded into `DirectJsonFormat` at build time
   (schema goes in the LLM request) **and** served at `/catalog.json` for
   clients to register renderers under the same `catalogId`.
-- **`a2ui-agent/app/agent_executor.py`** — `A2aAgentExecutor` subclass (modeled
+- **`app/agent_executor.py`** — `A2aAgentExecutor` subclass (modeled
   on the official rizzcharts sample): per request it runs
   `try_activate_a2ui_extension` (extension present → A2UI path), resolves the
   catalog via `get_selected_catalog(clientCapabilities)`, and writes
   `system:a2ui_*` into session state. `A2uiEventConverter` turns the agent's
   `send_a2ui_json_to_client` responses into A2A `DataPart`s.
-- **`a2ui-agent/app/app_utils/a2a.py`** — attaches the A2A routes using the
+- **`app/app_utils/a2a.py`** — attaches the A2A routes using the
   `a2a-sdk` line that `a2ui-agent-sdk` pins (`a2a-sdk <0.4`): card at
   `/.well-known/agent-card.json`, JSON-RPC at `/a2a/a2ui_agent`
   (`A2AFastAPIApplication`).
-- **`a2ui-agent/app/fast_api_app.py`** — FastAPI app (planner-style): lifespan
+- **`app/fast_api_app.py`** — FastAPI app (planner-style): lifespan
   builds the agent + `Runner` and attaches A2A routes; serves `/catalog.json`
   and `/`. (The demo client is no longer served here — see **a2ui-client**.)
 - **a2ui-client (separate repo)** — a minimal **demo client** (static HTML/JS,
@@ -90,8 +90,7 @@ service account, which needs `roles/aiplatform.user` on the project to call
 Gemini via Vertex (grant once if missing).
 
 ```bash
-# personal (adk-tut-499512 / us-central1)
-cd a2ui-agent
+# personal (adk-tut-508714 / us-central1)
 ./build.personal.sh      # lint + smoke import
 ./deploy.personal.sh     # docker build + push + gcloud run deploy
 
@@ -116,20 +115,20 @@ Endpoints after deploy:
 
 ```bash
 # card (shows the A2UI extension + supportedCatalogIds)
-curl https://a2ui-agent-personal-947331501288.us-central1.run.app/.well-known/agent-card.json
+curl https://a2ui-agent-personal-238721448932.us-central1.run.app/.well-known/agent-card.json
 
 # catalog
-curl https://a2ui-agent-personal-947331501288.us-central1.run.app/catalog.json
+curl https://a2ui-agent-personal-238721448932.us-central1.run.app/catalog.json
 
 # text path (no extension)
-curl -X POST https://a2ui-agent-personal-947331501288.us-central1.run.app/a2a/a2ui_agent \
+curl -X POST https://a2ui-agent-personal-238721448932.us-central1.run.app/a2a/a2ui_agent \
   -H 'Content-Type: application/json' \
   -d '{"id":"1","jsonrpc":"2.0","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"text":"what is the capital of France?"}]}}}'
 
 # A2UI path (extension + clientCapabilities) -> application/json+a2ui DataParts
-curl -X POST https://a2ui-agent-personal-947331501288.us-central1.run.app/a2a/a2ui_agent \
+curl -X POST https://a2ui-agent-personal-238721448932.us-central1.run.app/a2a/a2ui_agent \
   -H 'Content-Type: application/json' \
-  -d '{"id":"2","jsonrpc":"2.0","method":"message/send","params":{"message":{"messageId":"m2","role":"user","extensions":["https://a2ui.org/a2a-extension/a2ui/v0.9"],"metadata":{"a2uiClientCapabilities":{"supportedCatalogIds":["https://a2ui-agent-personal-947331501288.us-central1.run.app/catalog.json"]}},"parts":[{"text":"show me an A2UI demo with a button and some text"}]}}}'
+  -d '{"id":"2","jsonrpc":"2.0","method":"message/send","params":{"message":{"messageId":"m2","role":"user","extensions":["https://a2ui.org/a2a-extension/a2ui/v0.9"],"metadata":{"a2uiClientCapabilities":{"supportedCatalogIds":["https://a2ui-agent-personal-238721448932.us-central1.run.app/catalog.json"]}},"parts":[{"text":"show me an A2UI demo with a button and some text"}]}}}'
 ```
 
 Open the **a2ui-client** repo's deployed page in a browser for the rendered
@@ -160,19 +159,18 @@ add.
 ## Project layout
 
 ```
-a2ui-agent/            the whole project (this repo)
-├── a2ui-agent/        Cloud Run: A2A + A2UI agent (single service)
-│   ├── app/           agent code + catalog
-│   │   ├── agent.py           LlmAgent: google_search + SendA2uiToClientToolset
-│   │   ├── agent_executor.py  A2aAgentExecutor subclass (extension/catalog negotiation)
-│   │   ├── fast_api_app.py    FastAPI: lifespan + A2A routes + /catalog.json
-│   │   ├── app_utils/a2a.py   A2A route attach (A2AFastAPIApplication)
-│   │   ├── catalog.json       Custom catalog (source of truth, served at /catalog.json)
-│   │   └── examples/          Validated A2UI few-shot examples
-│   ├── Dockerfile
-│   ├── build.sh / deploy.sh            Office: build + deploy to Cloud Run
-│   ├── build.personal.sh / deploy.personal.sh  Personal variants
-│   └── a2ui.deploy.env / deploy.personal.env   Deployment config
+a2ui-agent/            the whole project (this repo — the deployable service)
+├── app/               the Cloud Run service code + catalog
+│   ├── agent.py           LlmAgent: google_search + SendA2uiToClientToolset
+│   ├── agent_executor.py  A2aAgentExecutor subclass (extension/catalog negotiation)
+│   ├── fast_api_app.py    FastAPI: lifespan + A2A routes + /catalog.json
+│   ├── app_utils/a2a.py   A2A route attach (A2AFastAPIApplication)
+│   ├── catalog.json       Custom catalog (source of truth, served at /catalog.json)
+│   └── examples/          Validated A2UI few-shot examples
+├── Dockerfile
+├── build.sh / deploy.sh            Office: build + deploy to Cloud Run
+├── build.personal.sh / deploy.personal.sh  Personal variants
+├── a2ui.deploy.env / deploy.personal.env   Deployment config
 ├── docs/              beginner docs (see the reading order above)
 └── README.md          this file
 

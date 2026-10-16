@@ -11,6 +11,8 @@ if you are new:
 | [04-catalog.md](04-catalog.md) | What the catalog is, how custom components work, how the agent is constrained to it |
 | [05-glossary.md](05-glossary.md) | A2A / A2UI / ADK / catalog terms explained simply |
 | [06-troubleshooting.md](06-troubleshooting.md) | Common errors, "why is this failing", and fixes |
+| [07-flow-component-diagram.md](07-flow-component-diagram.md) | The A2A request flow between the runtime components, as a diagram |
+| [08-layer-stack-overview.md](08-layer-stack-overview.md) | The whole stack top-to-bottom, plus a concept checklist for deep dives |
 
 ## The shortest possible summary
 

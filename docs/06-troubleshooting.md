@@ -53,7 +53,7 @@ The service (or your local machine) cannot call Vertex AI.
   `roles/aiplatform.user` on the project:
 
 ```bash
-gcloud projects add-iam-policy-binding adk-tut-499512 \
+gcloud projects add-iam-policy-binding adk-tut-508714 \
   --member="serviceAccount:<service-account-email>" \
   --role="roles/aiplatform.user"
 ```
@@ -164,7 +164,7 @@ tool.
 1. **Cloud Run logs**:
    ```bash
    gcloud logging read 'resource.type=cloud_run_revision AND resource.labels.service_name=a2ui-agent-personal' \
-     --project adk-tut-499512 --limit 50 --format='value(timestamp,severity,textPayload)'
+     --project adk-tut-508714 --limit 50 --format='value(timestamp,severity,textPayload)'
    ```
 2. **Card/catalog sanity**:
    ```bash

@@ -7,7 +7,7 @@ demo. There are two journeys:
 2. [A plain-text question](#2-a-plain-text-question-eg-what-is-the-capital-of-france)
 3. [An A2UI request](#3-an-a2ui-request-eg-show-me-a-demo-with-a-button-and-text)
 
-We use the live service URL `https://a2ui-agent-personal-947331501288.us-central1.run.app`
+We use the live service URL `https://a2ui-agent-personal-238721448932.us-central1.run.app`
 in the examples; replace it with your deployed URL.
 
 ---
